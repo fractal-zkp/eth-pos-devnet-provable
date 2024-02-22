@@ -1,0 +1,136 @@
+version: "3.9"
+services:
+  #Creates a genesis state for the beacon chain using a YAML configuration file and
+  # a deterministic set of 64 validators.
+  create-beacon-chain-genesis:
+    image: "gcr.io/prysmaticlabs/prysm/cmd/prysmctl:latest"
+    command:
+      - testnet
+      - generate-genesis
+      - --fork=capella
+      - --num-validators=64
+      - --genesis-time-delay=15
+      - --output-ssz=/consensus/genesis.ssz
+      - --chain-config-file=/consensus/config.yml
+      - --geth-genesis-json-in=/execution/genesis.json
+      - --geth-genesis-json-out=/execution/genesis.json
+    volumes:
+      - ./consensus:/consensus
+      - ./execution:/execution
+
+  create-beacon-node-keys:
+    image: "alpine:latest"
+    command:
+      - ./consensus/init.sh
+    volumes:
+      - ./consensus:/consensus
+      - ./execution:/execution
+
+  erigon-genesis:
+    image: "thorax/erigon:2.58.0-arm64"
+    platform: linux/arm64/v8
+    command: --datadir=/execution/erigon init /execution/genesis.json
+    volumes:
+      - ./execution:/execution
+      - ./execution/genesis.json:/execution/genesis.json
+    depends_on:
+      create-beacon-chain-genesis:
+        condition: service_completed_successfully
+
+  beacon-chain:
+    image: "gcr.io/prysmaticlabs/prysm/beacon-chain:v4.2.0"
+    platform: linux/arm64/v8
+    command:
+      - --datadir=/consensus/beacondata-2
+      - --min-sync-peers=0
+      - --genesis-state=/consensus/genesis.ssz
+      - --interop-eth1data-votes
+      - --chain-config-file=/consensus/config.yml
+      - --contract-deployment-block=0
+      - --chain-id=${CHAIN_ID:-32382}
+      - --rpc-host=0.0.0.0
+      - --grpc-gateway-host=0.0.0.0
+      - --execution-endpoint=http://erigon:8551
+      - --accept-terms-of-use
+      - --jwt-secret=/execution/jwtsecret
+      - --suggested-fee-recipient=0x85da99c8a7c2c95964c8efd687e95e632fc533d6
+      - --minimum-peers-per-subnet=0
+      - --enable-debug-rpc-endpoints
+      - --p2p-tcp-port=13001
+    depends_on:
+      create-beacon-chain-genesis:
+        condition: service_completed_successfully
+      create-beacon-node-keys:
+        condition: service_completed_successfully
+    ports:
+      - 13001:13001
+    volumes:
+      - ./consensus:/consensus
+      - ./execution:/execution
+      - ./execution/jwtsecret:/execution/jwtsecret
+    networks:
+      polygon-net:
+        ipv4_address: 10.100.100.11
+
+  # Runs the go-ethereum execution client with the specified, unlocked account and necessary
+  # APIs to allow for proof-of-stake consensus via Prysm.
+  erigon:
+    image: "thorax/erigon:2.47.0-arm64"
+    platform: linux/arm64/v8
+    command:
+      - --http
+      - --http.api=eth,net,web3,erigon,engine,debug
+      - --http.addr=0.0.0.0
+      - --http.corsdomain=*
+      - --ws
+      - --authrpc.vhosts=*
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.jwtsecret=/execution/jwtsecret
+      - --datadir=/execution/erigon
+      - --nat=extip:10.100.100.13
+      - --db.size.limit=1GB
+      - --networkid=32382
+    ports:
+      - 18551:8551
+      - 18545:8545
+      - 18546:8546
+    depends_on:
+      erigon-genesis:
+        condition: service_completed_successfully
+      beacon-chain:
+        condition: service_started
+    volumes:
+      - ./execution:/execution
+      - ./execution/jwtsecret:/execution/jwtsecret
+    networks:
+      polygon-net:
+        ipv4_address: 10.100.100.13
+
+
+  # We run a validator client with 64, deterministically-generated keys that match
+  # The validator keys present in the beacon chain genesis state generated a few steps above.
+  validator:
+    image: "gcr.io/prysmaticlabs/prysm/validator:v4.2.0"
+    platform: linux/arm64/v8
+    command:
+      - --beacon-rpc-provider=beacon-chain:4000
+      - --datadir=/consensus/validatordata
+      - --accept-terms-of-use
+      - --interop-num-validators=64
+      - --interop-start-index=0
+      - --chain-config-file=/consensus/config.yml
+    depends_on:
+      beacon-chain:
+        condition: service_started
+    volumes:
+      - ./consensus:/consensus
+    networks:
+      polygon-net:
+        ipv4_address: 10.100.100.14
+
+networks:
+  polygon-net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 10.100.100.0/24
