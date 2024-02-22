@@ -105,7 +105,7 @@ sudo chown -R $USER:$USER execution/erigon.bak/
 ```
 7.  Now we can start the Jerrigon fork of Erigon. This will give us RPC
     access to the state that we created in the previous steps.
-
+    When running on local machines, adjusting the db.size.limit flag will resolve `err="mdbx_env_open: MDBX_TOO_LARGE`.
 ``` bash
 ~/code/jerrigon/build/bin/erigon \
     --http \
@@ -118,7 +118,8 @@ sudo chown -R $USER:$USER execution/erigon.bak/
     --txpool.disable=true \
     --no-downloader=true \
     --maxpeers 0 \
-    --datadir=./execution/erigon.bak
+    --datadir=./execution/erigon.bak \
+    --db.size.limit=1GB
 ```
 
 8.  With the RPC running we can retrieve the blocks, witnesses, and use
