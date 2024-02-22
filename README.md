@@ -119,6 +119,7 @@ sudo chown -R $USER:$USER execution/erigon.bak/
     --no-downloader=true \
     --maxpeers 0 \
     --datadir=./execution/erigon.bak \
+    --networkid=32382 \
     --db.size.limit=1GB
 ```
 
