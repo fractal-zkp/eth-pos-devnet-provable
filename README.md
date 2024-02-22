@@ -118,7 +118,9 @@ sudo chown -R $USER:$USER execution/erigon.bak/
     --txpool.disable=true \
     --no-downloader=true \
     --maxpeers 0 \
-    --datadir=./execution/erigon.bak
+    --datadir=./execution/erigon.bak \
+    --networkid=32382 \
+    --db.size.limit=1GB
 ```
 
 8.  With the RPC running we can retrieve the blocks, witnesses, and use
