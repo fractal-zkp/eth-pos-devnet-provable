@@ -88,9 +88,9 @@ services:
       - --db.size.limit=1GB
       - --networkid=32382
     ports:
-      - 18551:8551
-      - 18545:8545
-      - 18546:8546
+      - 8551:8551
+      - 8545:8545
+      - 8546:8546
     depends_on:
       erigon-genesis:
         condition: service_completed_successfully
